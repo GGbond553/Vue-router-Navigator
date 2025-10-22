@@ -1,0 +1,8 @@
+#vue-router-navigator {
+  all: initial !important;
+}
+
+#vue-router-navigator * {
+  all: unset !important;
+  box-sizing: border-box !important;
+}
