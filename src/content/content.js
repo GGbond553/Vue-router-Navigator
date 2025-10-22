@@ -604,7 +604,7 @@ class VueRouterNavigator {
     this.searchResults = this.routes.filter(route => 
       route.name?.toLowerCase().includes(query) || 
       route.path?.toLowerCase().includes(query)
-    ).slice(0, 15); // 增加结果数量到15个
+    ); // 取消搜索结果数量限制
     
     this.showSearchResults();
   }
@@ -876,6 +876,19 @@ class VueRouterNavigator {
     this.floatingWindow.classList.add('focused', 'expanded');
     // 聚焦搜索框时停止事件冒泡，避免触发外部点击事件
     event?.stopPropagation();
+    
+    // 检测搜索框内是否有内容，如果有则触发搜索
+    const searchInput = this.shadowRoot.getElementById('search-input');
+    const query = searchInput.value.trim();
+    if (query) {
+      // 有内容时触发搜索操作，取消数量限制
+      this.searchResults = this.routes.filter(route => 
+        route.name?.toLowerCase().includes(query.toLowerCase()) || 
+        route.path?.toLowerCase().includes(query.toLowerCase())
+      );
+      this.showSearchResults();
+    }
+    
     // 搜索框聚焦时根据内容计算所需宽度
     this.adjustWidthByContent();
   }

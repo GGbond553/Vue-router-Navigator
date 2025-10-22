@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Vue-Router-Navigator",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "给本地开发环境提供一键式、可视化、可拖拽的 Vue-Router 导航与菜单预览工具",
   "permissions": [
     "activeTab",
