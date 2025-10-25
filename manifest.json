@@ -1,11 +1,12 @@
 {
   "manifest_version": 3,
   "name": "Vue-Router-Navigator",
-  "version": "0.3.2",
+  "version": "0.5.0",
   "description": "给本地开发环境提供一键式、可视化、可拖拽的 Vue-Router 导航与菜单预览工具",
   "permissions": [
     "activeTab",
-    "storage"
+    "storage",
+    "scripting"
   ],
   "host_permissions": [
     "http://localhost/*",
@@ -34,7 +35,6 @@
     "default_popup": "src/popup/popup.html",
     "default_title": "Vue-Router-Navigator"
   },
-  "devtools_page": "src/devtools/devtools.html",
   "icons": {
     "16": "icons/icon16.png",
     "32": "icons/icon32.png",

@@ -5,102 +5,233 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Vue-Router-Navigator</title>
   <style>
-    body {
-      width: 300px;
-      padding: 16px;
+    * {
       margin: 0;
-      font-family: system-ui, -apple-system, sans-serif;
-      font-size: 13px;
-      line-height: 1.5;
-      color: #000;
-      background: #fff;
+      padding: 0;
+      box-sizing: border-box;
     }
+    
+    body {
+      width: 320px;
+      min-height: 400px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #fff;
+      overflow: hidden;
+    }
+    
+    .container {
+      padding: 24px 20px;
+    }
+    
     .header {
       text-align: center;
-      margin-bottom: 16px;
-      padding-bottom: 12px;
-      border-bottom: 1px solid #e0e0e0;
+      margin-bottom: 24px;
     }
+    
     .header h1 {
-      margin: 0;
-      font-size: 16px;
+      font-size: 20px;
       font-weight: 600;
+      margin-bottom: 4px;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.1);
     }
-    .header p {
-      margin: 4px 0 0;
+    
+    .header .version {
       font-size: 12px;
-      color: #666;
+      opacity: 0.8;
     }
-    .status {
+    
+    .rules-section {
+      background: rgba(255,255,255,0.1);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 20px;
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255,255,255,0.2);
+    }
+    
+    .rules-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 12px;
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      padding: 8px 12px;
-      background: #f5f5f5;
-      border-radius: 4px;
-      margin-bottom: 12px;
-    }
-    .status-indicator {
-      display: inline-block;
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: #999;
-    }
-    .status-indicator.active {
-      background: #000;
-    }
-    .controls {
-      display: flex;
       gap: 8px;
     }
-    button {
-      flex: 1;
-      padding: 8px 12px;
-      border: 1px solid #000;
-      background: #fff;
-      color: #000;
-      border-radius: 4px;
+    
+    .rules-list {
+      list-style: none;
+    }
+    
+    .rules-list li {
       font-size: 12px;
-      cursor: pointer;
+      line-height: 1.6;
+      margin-bottom: 8px;
+      padding-left: 16px;
+      position: relative;
+      opacity: 0.9;
+    }
+    
+    .rules-list li::before {
+      content: "•";
+      position: absolute;
+      left: 0;
+      color: rgba(255,255,255,0.7);
+    }
+    
+    .info-section {
+      background: rgba(255,255,255,0.08);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 20px;
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255,255,255,0.15);
+    }
+    
+    .info-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .info-content {
+      font-size: 12px;
+      line-height: 1.6;
+      opacity: 0.85;
+    }
+    
+    .features-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 12px;
+    }
+    
+    .feature-item {
+      background: rgba(255,255,255,0.1);
+      border-radius: 8px;
+      padding: 12px;
+      text-align: center;
+      font-size: 11px;
+      backdrop-filter: blur(5px);
+      border: 1px solid rgba(255,255,255,0.1);
       transition: all 0.2s ease;
     }
-    button:hover {
-      background: #000;
-      color: #fff;
+    
+    .feature-item:hover {
+      background: rgba(255,255,255,0.15);
+      transform: translateY(-1px);
     }
-    .info {
-      margin-top: 16px;
-      padding: 12px;
-      background: #f9f9f9;
-      border-radius: 4px;
-      font-size: 11px;
-      color: #666;
+    
+    .feature-icon {
+      font-size: 16px;
+      margin-bottom: 4px;
+      display: block;
+    }
+    
+    .footer {
+      text-align: center;
+      margin-top: 20px;
+      padding-top: 16px;
+      border-top: 1px solid rgba(255,255,255,0.1);
+    }
+    
+    .footer-text {
+      font-size: 10px;
+      opacity: 0.7;
+    }
+    
+    .status-indicator {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.5);
+      margin-left: 8px;
+      animation: pulse 2s infinite;
+    }
+    
+    .status-indicator.active {
+      background: #4ade80;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
     }
   </style>
 </head>
 <body>
-  <div class="header">
-    <h1>Vue-Router-Navigator</h1>
-    <p>v0.3.2 - 本地开发路由导航工具</p>
-  </div>
-  
-  <div class="status">
-    <span>状态: <span id="status-text">未检测到</span></span>
-    <span class="status-indicator" id="status-indicator"></span>
-  </div>
-  
-  <div class="controls">
-    <button id="clear-cache">清除缓存</button>
-    <button id="open-devtools">打开DevTools</button>
-  </div>
-  
-  <div class="info">
-    <strong>使用说明:</strong><br>
-    1. 仅在 localhost/127.0.0.1 生效<br>
-    2. 页面加载后自动检测 Vue Router<br>
-    3. 拖拽悬浮窗调整位置<br>
-    4. 使用 Alt+R 快捷键聚焦搜索
+  <div class="container">
+    <div class="header">
+      <h1>Vue-Router-Navigator</h1>
+      <div class="version">v0.5.0 - 本地开发路由导航工具</div>
+    </div>
+    
+    <div class="rules-section">
+      <div class="rules-title">
+        📋 使用规则
+        <span class="status-indicator" id="status-indicator"></span>
+      </div>
+      <ul class="rules-list">
+        <li>仅在 localhost/127.0.0.1 生效</li>
+        <li>页面加载后自动检测 Vue Router</li>
+        <li>拖拽悬浮窗调整位置</li>
+        <li>使用 Alt+R 快捷键聚焦搜索</li>
+      </ul>
+    </div>
+    
+    <div class="info-section">
+      <div class="info-title">✨ 核心功能</div>
+      <div class="info-content">
+        自动嗅探页面使用的 vue-router 实例，提供一键式、可视化、可拖拽的路由导航体验。
+      </div>
+      <div class="features-grid">
+        <div class="feature-item">
+          <span class="feature-icon">🔍</span>
+          智能路由检测
+        </div>
+        <div class="feature-item">
+          <span class="feature-icon">🎯</span>
+          一键跳转
+        </div>
+        <div class="feature-item">
+          <span class="feature-icon">📋</span>
+          多级菜单
+        </div>
+        <div class="feature-item">
+          <span class="feature-icon">🎨</span>
+          纯黑白灰设计
+        </div>
+        <div class="feature-item">
+          <span class="feature-icon">🖱️</span>
+          可拖拽悬浮
+        </div>
+        <div class="feature-item">
+          <span class="feature-icon">⌨️</span>
+          快捷键支持
+        </div>
+      </div>
+    </div>
+    
+    <div class="info-section">
+      <div class="info-title">🚀 高级特性</div>
+      <div class="info-content">
+        • 实时搜索功能，支持Enter键快速跳转<br>
+        • 智能边缘检测，防止悬浮窗超出屏幕<br>
+        • 位置记忆功能，刷新后自动恢复位置<br>
+        • 平滑动画过渡，提供流畅交互体验
+      </div>
+    </div>
+    
+    <div class="footer">
+      <div class="footer-text">
+        仅在本地开发环境生效，安全可靠 • 支持Vue2/Vue3
+      </div>
+    </div>
   </div>
 
   <script type="module" src="popup.js"></script>

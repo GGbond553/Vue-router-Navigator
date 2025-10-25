@@ -22,22 +22,16 @@ class VueRouterNavigator {
   }
 
   detectRouter() {
-    // 立即检查一次
     this.performRouterDetection();
     
     let attempts = 0;
-    const maxAttempts = 50;
-    
     const checkRouter = () => {
-      if (attempts >= maxAttempts) {
+      if (this.router || attempts >= 30) {
         this.updateStatus();
         return;
       }
       
-      if (attempts > 0) {
-        this.performRouterDetection();
-      }
-      
+      this.performRouterDetection();
       attempts++;
       setTimeout(checkRouter, 100);
     };
@@ -46,82 +40,40 @@ class VueRouterNavigator {
   }
   
   performRouterDetection() {
-    // Vue 3 检测
+    // Vue 3
     const appElement = document.querySelector('#app') || document.querySelector('.app');
-    if (appElement && appElement.__vue_app__) {
-      const router = appElement.__vue_app__.config?.globalProperties?.$router;
-      if (router) {
-        this.router = router;
-        this.extractRoutes();
-        this.updateStatus();
-        return;
-      }
+    if (appElement?.__vue_app__?.config?.globalProperties?.$router) {
+      this.router = appElement.__vue_app__.config.globalProperties.$router;
+      this.extractRoutes();
+      this.updateStatus();
+      return;
     }
     
-    // Vue 2 检测
-    if (window.Vue && window.Vue.prototype && window.Vue.prototype.$router) {
+    // Vue 2
+    if (window.Vue?.prototype?.$router) {
       this.router = window.Vue.prototype.$router;
       this.extractRoutes();
       this.updateStatus();
       return;
     }
     
-    // 全局路由检测
+    // 全局路由
     if (window.$router) {
       this.router = window.$router;
       this.extractRoutes();
       this.updateStatus();
+      return;
     }
     
-    // 扫描页面中的 Vue 实例
-    const allElements = document.querySelectorAll('*');
-    
-    for (let element of allElements) {
-      if (element.__vue__) {
-        const vueInstance = element.__vue__;
-        if (vueInstance.$router) {
-          this.router = vueInstance.$router;
-          this.extractRoutes();
-          this.updateStatus();
-          return;
-        }
-      }
-      
-      if (element.__vueParentComponent__) {
-        const parentComponent = element.__vueParentComponent__;
-        if (parentComponent.$router) {
-          this.router = parentComponent.$router;
-          this.extractRoutes();
-          this.updateStatus();
-          return;
-        }
-      }
-    }
-    
-    // 检查常见的 Vue 挂载点
-    const commonSelectors = ['#app', '#root', '.app', '.root'];
-    for (let selector of commonSelectors) {
-      const element = document.querySelector(selector);
-      if (element) {
-        if (element.__vue__) {
-          const vueInstance = element.__vue__;
-          if (vueInstance.$router) {
-            this.router = vueInstance.$router;
-            this.extractRoutes();
-            this.updateStatus();
-            return;
-          }
-        }
-        
-        if (element.__vueParentComponent__) {
-          const parentComponent = element.__vueParentComponent__;
-          if (parentComponent.$router) {
-            this.router = parentComponent.$router;
-            this.extractRoutes();
-            this.updateStatus();
-            return;
-          }
-        }
+    // 扫描Vue实例
+    const elements = document.querySelectorAll('*');
+    for (let element of elements) {
+      const router = element.__vue__?.$router || element.__vueParentComponent__?.$router;
+      if (router) {
+        this.router = router;
+        this.extractRoutes();
+        this.updateStatus();
+        return;
       }
     }
   }
@@ -130,22 +82,13 @@ class VueRouterNavigator {
     if (!this.router) return;
     
     try {
-      let routes;
-      if (this.router.getRoutes) {
-        routes = this.router.getRoutes();
-      } else if (this.router.options?.routes) {
-        routes = this.router.options.routes;
-      } else if (this.router.matcher?.getRoutes) {
-        routes = this.router.matcher.getRoutes();
-      } else if (Array.isArray(this.router)) {
-        routes = this.router;
-      } else {
-        this.routes = [];
-        return;
-      }
+      const routes = this.router.getRoutes?.() || 
+                    this.router.options?.routes || 
+                    this.router.matcher?.getRoutes?.() || 
+                    this.router;
       
-      this.routes = routes ? this.flattenRoutes(routes) : [];
-    } catch (error) {
+      this.routes = Array.isArray(routes) ? this.flattenRoutes(routes) : [];
+    } catch {
       this.routes = [];
     }
   }
@@ -483,7 +426,7 @@ class VueRouterNavigator {
     backButton?.addEventListener('click', this.handleBackButton.bind(this));
     
     window.addEventListener('resize', this.handleWindowResize.bind(this));
-    document.addEventListener('keydown', this.handleGlobalKeydown.bind(this));
+    document.addEventListener('keydown', this.handleGlobalKeydown.bind(this), { capture: true });
     
     // 点击悬浮窗内部聚焦，点击外部失焦
     this.floatingWindow.addEventListener('click', e => {
@@ -505,7 +448,41 @@ class VueRouterNavigator {
       if (chrome && chrome.runtime && chrome.runtime.onMessage) {
         chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           if (request.action === 'getStatus') {
-            sendResponse({ hasRouter: !!this.router });
+            // 确保返回最新的路由状态
+            if (!this.router) {
+              this.performRouterDetection();
+              
+              // 等待路由检测完成再返回结果，增加等待时间确保检测完成
+              const checkRouterInterval = setInterval(() => {
+                if (this.router || this.routes.length > 0) {
+                  clearInterval(checkRouterInterval);
+                  sendResponse({ 
+                    hasRouter: !!this.router,
+                    routesCount: this.routes.length,
+                    isReady: true
+                  });
+                }
+              }, 50);
+              
+              // 设置最大等待时间，避免无限等待
+              setTimeout(() => {
+                clearInterval(checkRouterInterval);
+                sendResponse({ 
+                  hasRouter: !!this.router,
+                  routesCount: this.routes.length,
+                  isReady: true
+                });
+              }, 1000);
+              
+              return true; // 保持消息通道开放
+            }
+            
+            sendResponse({ 
+              hasRouter: !!this.router,
+              routesCount: this.routes.length,
+              isReady: true
+            });
+            return true; // 保持消息通道开放
           }
         });
       }
@@ -625,7 +602,6 @@ class VueRouterNavigator {
         this.showContextMenu(e, route);
       });
       
-      // 添加鼠标悬停效果
       item.addEventListener('mouseenter', () => {
         const selected = resultsContainer.querySelector('.search-item.selected');
         if (selected) selected.classList.remove('selected');
@@ -636,17 +612,11 @@ class VueRouterNavigator {
     });
     
     resultsContainer.classList.add('show');
-    
-    // 确保搜索结果可见且可以滚动
     resultsContainer.scrollTop = 0;
     
-    // 搜索结果展示后重新计算宽度并检测边缘
     this.adjustWidthByContent();
     
-    // 高度变化后检测边缘碰撞
-    setTimeout(() => {
-      this.checkEdgeCollision();
-    }, 100);
+    setTimeout(() => this.checkEdgeCollision(), 100);
   }
 
   hideSearchResults() {
@@ -656,29 +626,19 @@ class VueRouterNavigator {
 
   toggleMenu() {
     this.menuOpen = !this.menuOpen;
-    // 菜单切换状态处理
     
     const menuContainer = this.shadowRoot.getElementById('route-menu');
-    if (!menuContainer) {
-      // 菜单容器未找到，静默处理
-      return;
-    }
+    if (!menuContainer) return;
     
     if (this.menuOpen) {
       this.showRouteMenu();
-      // 显示下拉框时确保悬浮窗保持聚焦状态
       this.handleFloatingWindowFocus();
-      // 下拉框打开时根据内容调整宽度
       this.adjustWidthByContent();
     } else {
       this.hideRouteMenu();
-      // 下拉框关闭时恢复最小宽度
       this.floatingWindow.style.width = '100px';
       
-      // 宽度变化后检测边缘碰撞
-      setTimeout(() => {
-        this.checkEdgeCollision();
-      }, 100);
+      setTimeout(() => this.checkEdgeCollision(), 100);
     }
   }
 
@@ -694,14 +654,9 @@ class VueRouterNavigator {
     menuContainer.classList.add('show');
     this.attachMenuEventListeners(menuContainer);
     
-    // 下拉框显示后根据内容调整宽度
     setTimeout(() => {
       this.adjustWidthForMenu();
-      
-      // 高度变化后检测边缘碰撞
-      setTimeout(() => {
-        this.checkEdgeCollision();
-      }, 100);
+      setTimeout(() => this.checkEdgeCollision(), 100);
     }, 50);
   }
 
@@ -749,18 +704,14 @@ class VueRouterNavigator {
       item.addEventListener('click', () => {
         const path = item.dataset.path;
         const route = this.routes.find(r => r.path === path);
-        if (route) {
-          this.navigateToRoute(route);
-        }
+        if (route) this.navigateToRoute(route);
       });
       
       item.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         const path = item.dataset.path;
         const route = this.routes.find(r => r.path === path);
-        if (route) {
-          this.showContextMenu(e, route);
-        }
+        if (route) this.showContextMenu(e, route);
       });
       
       this.setupScrollAnimation(item);
@@ -777,7 +728,7 @@ class VueRouterNavigator {
         }
         this.hideSearchResults();
         this.hideRouteMenu();
-        this.menuOpen = false; // 重置菜单状态
+        this.menuOpen = false;
       } catch (error) {
         // 路由导航失败，静默处理
       }
@@ -813,19 +764,14 @@ class VueRouterNavigator {
     document.body.appendChild(menu);
     
     const removeMenu = () => {
-      if (menu.parentNode) {
-        menu.parentNode.removeChild(menu);
-      }
+      if (menu.parentNode) menu.parentNode.removeChild(menu);
       document.removeEventListener('click', removeMenu);
     };
     
-    setTimeout(() => {
-      document.addEventListener('click', removeMenu);
-    }, 100);
+    setTimeout(() => document.addEventListener('click', removeMenu), 100);
   }
 
-
-   handleSearchKeydown(e) {
+  handleSearchKeydown(e) {
     if (e.key === 'Escape') {
       this.hideSearchResults();
       this.hideRouteMenu();
@@ -836,11 +782,8 @@ class VueRouterNavigator {
       if (selectedItem && this.searchResults.length > 0) {
         selectedItem.click();
       } else if (this.searchResults.length > 0) {
-        // 如果没有选中项但有搜索结果，默认点击第一个结果
         const firstItem = this.shadowRoot.querySelector('.search-item');
-        if (firstItem) {
-          firstItem.click();
-        }
+        if (firstItem) firstItem.click();
       }
     } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
       e.preventDefault();
@@ -848,40 +791,13 @@ class VueRouterNavigator {
     }
   }
   
-  showSearchResultsWithAnimation() {
-    const searchContainer = this.shadowRoot.querySelector('.search-container');
-    const searchResults = this.shadowRoot.getElementById('search-results');
-    const backButton = this.shadowRoot.getElementById('back-button');
-    
-    searchContainer.style.transition = 'opacity 0.3s ease';
-    searchResults.style.transition = 'opacity 0.3s ease';
-    
-    searchContainer.style.opacity = '0';
-    searchResults.style.opacity = '1';
-    backButton.style.display = 'block';
-    
-    setTimeout(() => {
-      searchContainer.style.display = 'none';
-      searchResults.classList.add('show');
-      // 搜索结果显示后根据内容调整宽度
-      this.adjustWidthByContent();
-      // 保持搜索框焦点并启用键盘导航
-      const searchInput = this.shadowRoot.getElementById('search-input');
-      searchInput.focus();
-      searchInput.addEventListener('keydown', this.handleKeyboardNavigation.bind(this));
-    }, 300);
-  }
-  
   handleSearchFocus() {
     this.floatingWindow.classList.add('focused', 'expanded');
-    // 聚焦搜索框时停止事件冒泡，避免触发外部点击事件
     event?.stopPropagation();
     
-    // 检测搜索框内是否有内容，如果有则触发搜索
     const searchInput = this.shadowRoot.getElementById('search-input');
     const query = searchInput.value.trim();
     if (query) {
-      // 有内容时触发搜索操作，取消数量限制
       this.searchResults = this.routes.filter(route => 
         route.name?.toLowerCase().includes(query.toLowerCase()) || 
         route.path?.toLowerCase().includes(query.toLowerCase())
@@ -889,7 +805,6 @@ class VueRouterNavigator {
       this.showSearchResults();
     }
     
-    // 搜索框聚焦时根据内容计算所需宽度
     this.adjustWidthByContent();
   }
   
@@ -899,83 +814,66 @@ class VueRouterNavigator {
   
   handleFloatingWindowBlur() {
     this.floatingWindow.classList.remove('focused');
-    // 失焦时恢复最小宽度
     this.floatingWindow.style.width = '100px';
   }
   
   adjustWidthByContent() {
-    // 根据内容计算所需宽度 - 搜索结果和菜单使用相同的宽度计算逻辑
     const searchContainer = this.shadowRoot.querySelector('.search-container');
     const searchInput = this.shadowRoot.getElementById('search-input');
     const menuToggle = this.shadowRoot.getElementById('menu-toggle');
     const searchResults = this.shadowRoot.getElementById('search-results');
     const routeMenu = this.shadowRoot.getElementById('route-menu');
     
-    // 临时显示元素来计算实际宽度
     const originalDisplay = searchContainer.style.display;
     searchContainer.style.display = 'flex';
     searchContainer.style.visibility = 'hidden';
     
-    // 计算搜索输入框和按钮的实际宽度
-    const inputWidth = searchInput.scrollWidth + 12; // padding和边框
-    const buttonWidth = menuToggle.offsetWidth + 8; // 间距和padding
-    let totalWidth = inputWidth + buttonWidth + 16; // 容器padding
+    const inputWidth = searchInput.scrollWidth + 12;
+    const buttonWidth = menuToggle.offsetWidth + 8;
+    let totalWidth = inputWidth + buttonWidth + 16;
     
-    // 如果搜索结果可见，使用与菜单相同的宽度计算逻辑
     if (searchResults.classList.contains('show') && searchResults.children.length > 0) {
       let maxResultWidth = 0;
       searchResults.querySelectorAll('.search-item').forEach(item => {
         const routeName = item.querySelector('.route-name');
         const routePath = item.querySelector('.route-path');
-        const nameWidth = this.getTextWidth(routeName.textContent, '11px Arial'); // 使用与菜单相同的字体
+        const nameWidth = this.getTextWidth(routeName.textContent, '11px Arial');
         const pathWidth = this.getTextWidth(routePath.textContent, '9px Arial');
-        const itemWidth = Math.max(nameWidth, pathWidth) + 24; // 加上padding和边距
+        const itemWidth = Math.max(nameWidth, pathWidth) + 24;
         maxResultWidth = Math.max(maxResultWidth, itemWidth);
       });
       totalWidth = Math.max(totalWidth, maxResultWidth);
     }
     
-    // 如果菜单可见，计算菜单项的最大宽度
     if (routeMenu.classList.contains('show') && routeMenu.children.length > 0) {
       let maxMenuWidth = 0;
       routeMenu.querySelectorAll('.menu-item').forEach(item => {
         const textWidth = this.getTextWidth(item.textContent, '14px Arial');
         const indent = parseInt(item.style.paddingLeft) || 12;
-        const itemWidth = textWidth + indent + 24; // 24px for arrow and padding
+        const itemWidth = textWidth + indent + 24;
         maxMenuWidth = Math.max(maxMenuWidth, itemWidth);
       });
       totalWidth = Math.max(totalWidth, maxMenuWidth);
     }
     
-    // 恢复原始状态
     searchContainer.style.display = originalDisplay;
     searchContainer.style.visibility = '';
     
-    // 设置宽度，确保能显示完整内容，但不超过最大宽度(20vw)
-    const maxWidth = window.innerWidth * 0.2; // 20vw
+    const maxWidth = window.innerWidth * 0.2;
     const newWidth = Math.min(Math.max(totalWidth, 100), maxWidth);
     
-    // 记录原始位置用于后续边缘检测
-    const originalPosition = { x: this.position.x, y: this.position.y };
-    
-    // 更新宽度
     this.floatingWindow.style.width = newWidth + 'px';
     
-    // 如果达到20vw上限，添加展开类
     if (newWidth >= maxWidth) {
       this.floatingWindow.classList.add('expanded');
     } else {
       this.floatingWindow.classList.remove('expanded');
     }
     
-    // 宽度变化后重新检测边缘碰撞
-    setTimeout(() => {
-      this.checkEdgeCollision();
-    }, 0);
+    setTimeout(() => this.checkEdgeCollision(), 0);
   }
   
   adjustWidthForMenu() {
-    // 根据下拉框内容调整宽度
     const menuContainer = this.shadowRoot.getElementById('route-menu');
     const menuItems = menuContainer.querySelectorAll('.menu-item');
     
@@ -984,39 +882,28 @@ class VueRouterNavigator {
       return;
     }
     
-    // 计算最长菜单项的宽度
     let contentMaxWidth = 0;
     menuItems.forEach(item => {
       const textWidth = this.getTextWidth(item.textContent, '14px Arial');
       const indent = parseInt(item.style.paddingLeft) || 12;
-      contentMaxWidth = Math.max(contentMaxWidth, textWidth + indent + 24); // 24px for arrow and padding
+      contentMaxWidth = Math.max(contentMaxWidth, textWidth + indent + 24);
     });
     
-    // 设置宽度，确保能显示完整菜单内容，但不超过最大宽度(20vw)
-    const maxWidth = window.innerWidth * 0.2; // 20vw
+    const maxWidth = window.innerWidth * 0.2;
     const newWidth = Math.min(Math.max(contentMaxWidth, 100), maxWidth);
     
-    // 记录原始位置用于后续边缘检测
-    const originalPosition = { x: this.position.x, y: this.position.y };
-    
-    // 更新宽度
     this.floatingWindow.style.width = newWidth + 'px';
     
-    // 如果达到20vw上限，添加展开类
     if (newWidth >= maxWidth) {
       this.floatingWindow.classList.add('expanded');
     } else {
       this.floatingWindow.classList.remove('expanded');
     }
     
-    // 宽度变化后重新检测边缘碰撞
-    setTimeout(() => {
-      this.checkEdgeCollision();
-    }, 0);
+    setTimeout(() => this.checkEdgeCollision(), 0);
   }
   
   getTextWidth(text, font) {
-    // 计算文本宽度
     const canvas = document.createElement('canvas');
     const context = canvas.getContext('2d');
     context.font = font;
@@ -1050,7 +937,6 @@ class VueRouterNavigator {
     items.forEach(item => item.classList.remove('selected'));
     items[currentIndex].classList.add('selected');
     
-    // 滚动到选中项
     const selectedItem = items[currentIndex];
     const containerRect = resultsContainer.getBoundingClientRect();
     const itemRect = selectedItem.getBoundingClientRect();
@@ -1061,21 +947,7 @@ class VueRouterNavigator {
       resultsContainer.scrollTop += (itemRect.bottom - containerRect.bottom);
     }
     
-    // 确保滚动条可用
     resultsContainer.style.overflowY = 'auto';
-  }
-  
-  handleKeyboardNavigation(e) {
-    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-      e.preventDefault();
-      this.handleSearchResultsNavigation(e.key);
-    } else if (e.key === 'Enter') {
-      const selectedItem = this.shadowRoot.querySelector('.search-item.selected');
-      if (selectedItem) {
-        e.preventDefault();
-        selectedItem.click();
-      }
-    }
   }
   
   handleBackButton() {
@@ -1091,7 +963,6 @@ class VueRouterNavigator {
     searchResults.style.opacity = '0';
     backButton.style.display = 'none';
     
-    // 恢复悬浮窗宽度
     this.floatingWindow.classList.remove('expanded');
     
     setTimeout(() => {
@@ -1100,54 +971,44 @@ class VueRouterNavigator {
       searchInput.value = '';
       this.searchResults = [];
       searchContainer.style.display = 'flex';
-      // 返回后恢复最小宽度
       this.floatingWindow.style.width = '100px';
-      // 移除键盘导航事件监听
-      searchInput.removeEventListener('keydown', this.handleKeyboardNavigation.bind(this));
     }, 300);
   }
   
   handleWindowResize() {
-    // 窗口大小变化时检测边缘碰撞
     this.checkEdgeCollision();
   }
   
   checkEdgeCollision() {
-    // 仅在拖拽停止后执行边缘检测，确保至少10px距离
     const rect = this.floatingWindow.getBoundingClientRect();
     const windowWidth = window.innerWidth;
     const windowHeight = window.innerHeight;
-    const margin = 10; // 距离边缘的最小距离
+    const margin = 10;
     
     let newX = this.position.x;
     let newY = this.position.y;
     let needsAdjustment = false;
     
-    // 检测右边缘
     if (rect.right > windowWidth - margin) {
       newX = windowWidth - rect.width - margin;
       needsAdjustment = true;
     }
     
-    // 检测左边缘
     if (rect.left < margin) {
       newX = margin;
       needsAdjustment = true;
     }
     
-    // 检测下边缘
     if (rect.bottom > windowHeight - margin) {
       newY = windowHeight - rect.height - margin;
       needsAdjustment = true;
     }
     
-    // 检测上边缘
     if (rect.top < margin) {
       newY = margin;
       needsAdjustment = true;
     }
     
-    // 只在需要调整时添加动画
     if (needsAdjustment) {
       this.floatingWindow.style.transition = 'left 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94), top 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
       this.position.x = newX;
@@ -1155,7 +1016,6 @@ class VueRouterNavigator {
       this.floatingWindow.style.left = newX + 'px';
       this.floatingWindow.style.top = newY + 'px';
       
-      // 清除过渡效果
       setTimeout(() => {
         this.floatingWindow.style.transition = '';
       }, 300);
@@ -1165,13 +1025,34 @@ class VueRouterNavigator {
   handleGlobalKeydown(e) {
     if ((e.altKey && e.key === 'r') || (e.ctrlKey && e.key === 'k')) {
       e.preventDefault();
-      const searchInput = this.shadowRoot.getElementById('search-input');
-      searchInput.focus();
+      this.shadowRoot.getElementById('search-input').focus();
     }
   }
 
   updateStatus() {
-    // 状态更新方法 - 用于调试路由检测状态
+    try {
+      if (chrome?.runtime?.sendMessage) {
+        chrome.runtime.sendMessage({
+          action: 'routerStatusChanged',
+          hasRouter: !!this.router,
+          routesCount: this.routes.length
+        }).catch(() => {
+          // 忽略消息发送失败，可能是因为popup未打开
+        });
+      }
+      
+      if (this.router) {
+        console.log('[Vue Router Navigator] 路由检测成功:', {
+          hasRouter: true,
+          routesCount: this.routes.length,
+          router: this.router
+        });
+      } else {
+        console.log('[Vue Router Navigator] 路由检测失败，未找到Vue Router实例');
+      }
+    } catch (error) {
+      // 忽略状态更新错误
+    }
   }
 
   setupScrollAnimation(item) {
@@ -1247,9 +1128,7 @@ class VueRouterNavigator {
     
     const stopScroll = () => {
       isScrolling = false;
-      if (animationId) {
-        cancelAnimationFrame(animationId);
-      }
+      if (animationId) cancelAnimationFrame(animationId);
       
       routeName.style.transform = 'translateX(0px)';
       routePath.style.transform = 'translateX(0px)';
@@ -1275,9 +1154,7 @@ class VueRouterNavigator {
 }
 
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => {
-    new VueRouterNavigator();
-  });
+  document.addEventListener('DOMContentLoaded', () => new VueRouterNavigator());
 } else {
   new VueRouterNavigator();
 }
